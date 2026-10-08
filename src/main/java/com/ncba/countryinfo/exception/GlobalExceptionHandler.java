@@ -1,11 +1,13 @@
 package com.ncba.countryinfo.exception;
 
+import com.ncba.countryinfo.config.CorrelationIdFilter;
 import com.ncba.countryinfo.dto.ApiError;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -27,7 +29,7 @@ import java.util.Map;
 /**
  * Maps every exception to a consistent ApiError with the right HTTP status.
  * Client errors (4xx) are logged at WARN, upstream/server errors (5xx) at ERROR.
- * Internal details are never returned to the caller.
+ * Internal details are never returned; the correlation id links the response to the logs.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -93,15 +95,16 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, "The request conflicts with existing data", req, null);
     }
 
-    // ----- 5xx -----
+    // ----- 5xx: upstream SOAP problems -----
 
     @ExceptionHandler({ExternalServiceUnavailableException.class, CallNotPermittedException.class})
     public ResponseEntity<ApiError> handleUnavailable(RuntimeException ex, HttpServletRequest req) {
         log.error("upstream_unavailable path={} reason=\"{}\"", req.getRequestURI(), ex.getMessage());
-        ApiError body = new ApiError(Instant.now(), 503, "Service Unavailable",
-                "The country information service is temporarily unavailable. Please try again shortly.",
-                req.getRequestURI(), null);
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header(HttpHeaders.RETRY_AFTER, "30").body(body);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, "30")
+                .body(error(HttpStatus.SERVICE_UNAVAILABLE,
+                        "The country information service is temporarily unavailable. Please try again shortly.",
+                        req, null));
     }
 
     @ExceptionHandler(SoapServiceException.class)
@@ -118,8 +121,11 @@ public class GlobalExceptionHandler {
 
     private ResponseEntity<ApiError> build(HttpStatus status, String message, HttpServletRequest req,
                                            Map<String, String> fieldErrors) {
-        ApiError body = new ApiError(Instant.now(), status.value(), status.getReasonPhrase(),
-                message, req.getRequestURI(), fieldErrors);
-        return ResponseEntity.status(status).body(body);
+        return ResponseEntity.status(status).body(error(status, message, req, fieldErrors));
+    }
+
+    private ApiError error(HttpStatus status, String message, HttpServletRequest req, Map<String, String> fieldErrors) {
+        return new ApiError(Instant.now(), status.value(), status.getReasonPhrase(), message,
+                req.getRequestURI(), MDC.get(CorrelationIdFilter.MDC_KEY), fieldErrors);
     }
 }
