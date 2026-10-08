@@ -1,7 +1,12 @@
 package com.ncba.countryinfo.service;
 
+import com.ncba.countryinfo.dto.CountryInfoResponse;
+import com.ncba.countryinfo.dto.CountryUpdateRequest;
+import com.ncba.countryinfo.dto.PageResponse;
 import com.ncba.countryinfo.exception.CountryNotFoundException;
+import com.ncba.countryinfo.exception.ResourceNotFoundException;
 import com.ncba.countryinfo.model.CountryInfo;
+import com.ncba.countryinfo.model.Language;
 import com.ncba.countryinfo.repository.CountryInfoRepository;
 import com.ncba.countryinfo.soap.CountryInfoSoapClient;
 import com.ncba.countryinfo.soap.FullCountryInfoResult;
@@ -9,7 +14,9 @@ import com.ncba.countryinfo.util.TextUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -32,7 +39,9 @@ public class CountryInfoService {
         this.transactionTemplate = transactionTemplate;
     }
 
-    /** Steps 3-6: sentence case -> ISO code -> full info -> save to MySQL. */
+    // ---------- Steps 3-6: register a country from the SOAP service ----------
+
+    /** Sentence case -> ISO code -> full info -> save to MySQL. */
     public RegistrationResult registerCountry(String rawName) {
         String isoCode = resolveIsoCode(rawName);
         FullCountryInfoResult info = soapClient.getFullCountryInfo(isoCode);
@@ -50,6 +59,51 @@ public class CountryInfoService {
         return result;
     }
 
+    // ---------- Step 7: CRUD on stored countries ----------
+
+    @Transactional(readOnly = true)
+    public PageResponse<CountryInfoResponse> findAll(Pageable pageable) {
+        return PageResponse.of(repository.findAll(pageable).map(CountryInfoMapper::toResponse));
+    }
+
+    @Transactional(readOnly = true)
+    public CountryInfoResponse findById(Long id) {
+        return CountryInfoMapper.toResponse(getOrThrow(id));
+    }
+
+    @Transactional
+    public CountryInfoResponse update(Long id, CountryUpdateRequest request) {
+        CountryInfo country = getOrThrow(id);
+        country.setName(request.name().trim());
+        country.setCapitalCity(request.capitalCity());
+        country.setPhoneCode(request.phoneCode());
+        country.setContinentCode(request.continentCode());
+        country.setCurrencyIsoCode(request.currencyIsoCode());
+        country.setCountryFlag(request.countryFlag());
+        if (request.languages() != null) {
+            country.replaceLanguages(request.languages().stream()
+                    .map(l -> new Language(l.isoCode(), l.name()))
+                    .toList());
+        }
+        CountryInfo saved = repository.saveAndFlush(country);
+        log.info("country_updated id={} isoCode={}", id, saved.getIsoCode());
+        return CountryInfoMapper.toResponse(saved);
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        CountryInfo country = getOrThrow(id);
+        repository.delete(country);   // languages are removed too (cascade)
+        log.info("country_deleted id={} isoCode={}", id, country.getIsoCode());
+    }
+
+    // ---------- helpers ----------
+
+    private CountryInfo getOrThrow(Long id) {
+        return repository.findWithLanguagesById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Country with id %d not found".formatted(id)));
+    }
+
     /** Insert a new country, or refresh the existing row with the same ISO code. */
     private RegistrationResult upsert(FullCountryInfoResult info) {
         CountryInfo entity = repository.findByIsoCode(info.isoCode()).orElse(null);
@@ -62,7 +116,7 @@ public class CountryInfoService {
         return new RegistrationResult(CountryInfoMapper.toResponse(saved), created);
     }
 
-    /** Step 4: sentence case first (as the brief requires); title case as a fallback for multi-word names. */
+    /** Sentence case first (as the brief requires); title case as a fallback for multi-word names. */
     private String resolveIsoCode(String rawName) {
         String sentenceCase = TextUtils.toSentenceCase(rawName);
         log.info("resolve_iso_code_requested rawName=\"{}\" countryName=\"{}\"", rawName, sentenceCase);
