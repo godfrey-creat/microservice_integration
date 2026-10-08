@@ -44,7 +44,10 @@ public class CountryInfoController {
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}").buildAndExpand(result.country().id()).toUri();
         HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
-        return ResponseEntity.status(status).location(location).body(result.country());
+        return ResponseEntity.status(status)
+                .location(location)
+                .header("X-Data-Source", result.source().name())
+                .body(result.country());
     }
 
     /** Step 7: fetch all (paged, sorted by name). */

@@ -4,13 +4,16 @@ import com.ncba.countryinfo.dto.CountryInfoResponse;
 import com.ncba.countryinfo.dto.CountryUpdateRequest;
 import com.ncba.countryinfo.dto.PageResponse;
 import com.ncba.countryinfo.exception.CountryNotFoundException;
+import com.ncba.countryinfo.exception.ExternalServiceUnavailableException;
 import com.ncba.countryinfo.exception.ResourceNotFoundException;
+import com.ncba.countryinfo.exception.SoapServiceException;
 import com.ncba.countryinfo.model.CountryInfo;
 import com.ncba.countryinfo.model.Language;
 import com.ncba.countryinfo.repository.CountryInfoRepository;
 import com.ncba.countryinfo.soap.CountryInfoSoapClient;
 import com.ncba.countryinfo.soap.FullCountryInfoResult;
 import com.ncba.countryinfo.util.TextUtils;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -41,10 +44,18 @@ public class CountryInfoService {
 
     // ---------- Steps 3-6: register a country from the SOAP service ----------
 
-    /** Sentence case -> ISO code -> full info -> save to MySQL. */
+    /**
+     * Sentence case -> ISO code -> full info -> save to MySQL.
+     * If the SOAP service is unavailable, returns the previously stored copy of the country.
+     */
     public RegistrationResult registerCountry(String rawName) {
-        String isoCode = resolveIsoCode(rawName);
-        FullCountryInfoResult info = soapClient.getFullCountryInfo(isoCode);
+        FullCountryInfoResult info;
+        try {
+            String isoCode = resolveIsoCode(rawName);
+            info = soapClient.getFullCountryInfo(isoCode);
+        } catch (SoapServiceException | CallNotPermittedException e) {
+            return fallbackToStored(rawName, e);
+        }
 
         RegistrationResult result;
         try {
@@ -113,7 +124,20 @@ public class CountryInfoService {
         }
         CountryInfoMapper.applySoapResult(entity, info);
         CountryInfo saved = repository.saveAndFlush(entity);
-        return new RegistrationResult(CountryInfoMapper.toResponse(saved), created);
+        return new RegistrationResult(CountryInfoMapper.toResponse(saved), created, RegistrationResult.Source.SOAP);
+    }
+
+    /** SOAP is down: serve the stored copy if we have one, otherwise 503. */
+    private RegistrationResult fallbackToStored(String rawName, RuntimeException cause) {
+        String countryName = TextUtils.toSentenceCase(rawName);
+        log.warn("soap_unavailable_using_fallback countryName=\"{}\" cause=\"{}\"", countryName, cause.getMessage());
+        CountryInfoResponse stored = transactionTemplate.execute(status ->
+                repository.findFirstByNameIgnoreCase(countryName).map(CountryInfoMapper::toResponse).orElse(null));
+        if (stored == null) {
+            throw new ExternalServiceUnavailableException(
+                    "SOAP service unavailable and no stored data for '%s'".formatted(countryName), cause);
+        }
+        return new RegistrationResult(stored, false, RegistrationResult.Source.DATABASE_FALLBACK);
     }
 
     /** Sentence case first (as the brief requires); title case as a fallback for multi-word names. */

@@ -14,4 +14,8 @@ public interface CountryInfoRepository extends JpaRepository<CountryInfo, Long> 
 
     @EntityGraph(attributePaths = "languages")
     Optional<CountryInfo> findWithLanguagesById(Long id);
+
+    /** Used for the fallback when the SOAP service is unavailable. */
+    @EntityGraph(attributePaths = "languages")
+    Optional<CountryInfo> findFirstByNameIgnoreCase(String name);
 }

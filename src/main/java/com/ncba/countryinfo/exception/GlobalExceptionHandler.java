@@ -1,11 +1,13 @@
 package com.ncba.countryinfo.exception;
 
 import com.ncba.countryinfo.dto.ApiError;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -92,6 +94,15 @@ public class GlobalExceptionHandler {
     }
 
     // ----- 5xx -----
+
+    @ExceptionHandler({ExternalServiceUnavailableException.class, CallNotPermittedException.class})
+    public ResponseEntity<ApiError> handleUnavailable(RuntimeException ex, HttpServletRequest req) {
+        log.error("upstream_unavailable path={} reason=\"{}\"", req.getRequestURI(), ex.getMessage());
+        ApiError body = new ApiError(Instant.now(), 503, "Service Unavailable",
+                "The country information service is temporarily unavailable. Please try again shortly.",
+                req.getRequestURI(), null);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header(HttpHeaders.RETRY_AFTER, "30").body(body);
+    }
 
     @ExceptionHandler(SoapServiceException.class)
     public ResponseEntity<ApiError> handleUpstream(SoapServiceException ex, HttpServletRequest req) {
