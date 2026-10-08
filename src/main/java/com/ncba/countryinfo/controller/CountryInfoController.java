@@ -1,8 +1,8 @@
 package com.ncba.countryinfo.controller;
 
-import com.ncba.countryinfo.dto.CountryIsoCodeResponse;
 import com.ncba.countryinfo.dto.CountryNameRequest;
 import com.ncba.countryinfo.service.CountryInfoService;
+import com.ncba.countryinfo.soap.FullCountryInfoResult;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -20,9 +20,12 @@ public class CountryInfoController {
         this.service = service;
     }
 
-    /** Steps 3-4: { "name": "tanzania" } -> sentence case -> SOAP CountryISOCode. */
+    /**
+     * Steps 3-5: { "name": "kenya" } -> sentence case -> ISO code -> full country info.
+     * Step 6 will store the result in MySQL and return the stored record instead.
+     */
     @PostMapping
-    public CountryIsoCodeResponse register(@Valid @RequestBody CountryNameRequest request) {
-        return service.resolveIsoCode(request.name());
+    public FullCountryInfoResult register(@Valid @RequestBody CountryNameRequest request) {
+        return service.fetchCountryInfo(request.name());
     }
 }

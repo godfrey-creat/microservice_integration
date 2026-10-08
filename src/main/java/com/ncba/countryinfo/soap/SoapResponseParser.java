@@ -10,6 +10,8 @@ import org.xml.sax.InputSource;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Parses SOAP responses by element local name, so it does not depend on namespace
@@ -20,7 +22,7 @@ public final class SoapResponseParser {
     private SoapResponseParser() {
     }
 
-    /** Returns the text of CountryISOCodeResult, e.g. "KE". */
+    /** Step 4: returns the text of CountryISOCodeResult, e.g. "KE". */
     public static String parseCountryIsoCode(String xml) {
         Document doc = parse(xml);
         failOnSoapFault(doc);
@@ -29,6 +31,34 @@ public final class SoapResponseParser {
             throw new SoapServiceException("CountryISOCodeResult element missing from SOAP response");
         }
         return result.getTextContent().trim();
+    }
+
+    /** Step 5: returns the parsed FullCountryInfoResult, including its list of languages. */
+    public static FullCountryInfoResult parseFullCountryInfo(String xml) {
+        Document doc = parse(xml);
+        failOnSoapFault(doc);
+        Element result = firstElement(doc, "FullCountryInfoResult");
+        if (result == null) {
+            throw new SoapServiceException("FullCountryInfoResult element missing from SOAP response");
+        }
+
+        List<FullCountryInfoResult.LanguageResult> languages = new ArrayList<>();
+        NodeList languageNodes = result.getElementsByTagNameNS("*", "tLanguage");
+        for (int i = 0; i < languageNodes.getLength(); i++) {
+            Element lang = (Element) languageNodes.item(i);
+            languages.add(new FullCountryInfoResult.LanguageResult(
+                    childText(lang, "sISOCode"), childText(lang, "sName")));
+        }
+
+        return new FullCountryInfoResult(
+                childText(result, "sISOCode"),
+                childText(result, "sName"),
+                childText(result, "sCapitalCity"),
+                childText(result, "sPhoneCode"),
+                childText(result, "sContinentCode"),
+                childText(result, "sCurrencyISOCode"),
+                childText(result, "sCountryFlag"),
+                languages);
     }
 
     /** Best-effort extraction of a SOAP Fault's faultstring, or null if there is none. */
@@ -74,7 +104,8 @@ public final class SoapResponseParser {
         return nodes.getLength() == 0 ? null : (Element) nodes.item(0);
     }
 
-    /** Text of the first DIRECT child with the given local name. */
+    /** Text of the first DIRECT child with the given local name (so a country's sISOCode
+     *  is never confused with a language's sISOCode). */
     static String childText(Element parent, String localName) {
         for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
             if (child.getNodeType() == Node.ELEMENT_NODE && localName.equals(child.getLocalName())) {

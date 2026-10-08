@@ -32,12 +32,29 @@ public class CountryInfoSoapClient {
         String response = call("CountryISOCode", SoapEnvelopes.countryIsoCode(countryName));
         String isoCode = SoapResponseParser.parseCountryIsoCode(response);
 
+        // For unknown names the service returns a sentence ("No country found by that name")
+        // instead of a code, so anything that is not a 2-3 letter code means "not found".
         if (!ISO_CODE.matcher(isoCode).matches()) {
             log.info("soap_country_not_found countryName=\"{}\" serviceAnswer=\"{}\"", countryName, isoCode);
             throw new CountryNotFoundException("No country found with the name '%s'".formatted(countryName));
         }
         log.info("soap_iso_code_resolved countryName=\"{}\" isoCode={}", countryName, isoCode);
         return isoCode;
+    }
+
+    /** Step 5: FullCountryInfo(sCountryISOCode) -> FullCountryInfoResult. */
+    public FullCountryInfoResult getFullCountryInfo(String isoCode) {
+        String response = call("FullCountryInfo", SoapEnvelopes.fullCountryInfo(isoCode));
+        FullCountryInfoResult result = SoapResponseParser.parseFullCountryInfo(response);
+
+        // For an unknown code the service returns an empty sISOCode instead of an error.
+        if (result.isoCode() == null || result.isoCode().isBlank()) {
+            log.info("soap_full_info_not_found isoCode={}", isoCode);
+            throw new CountryNotFoundException("No country information found for ISO code '%s'".formatted(isoCode));
+        }
+        log.info("soap_full_info_fetched isoCode={} name=\"{}\" languages={}",
+                isoCode, result.name(), result.languages().size());
+        return result;
     }
 
     private String call(String operation, String envelope) {

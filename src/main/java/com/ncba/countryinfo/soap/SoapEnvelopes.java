@@ -18,10 +18,17 @@ public final class SoapEnvelopes {
     private SoapEnvelopes() {
     }
 
-    /** CountryISOCode operation: takes sCountryName, returns CountryISOCodeResult. */
+    /** Step 4 - CountryISOCode operation: takes sCountryName, returns CountryISOCodeResult. */
     public static String countryIsoCode(String countryName) {
         String body = "<web:CountryISOCode><web:sCountryName>%s</web:sCountryName></web:CountryISOCode>"
                 .formatted(escape(countryName));
+        return TEMPLATE.formatted(SERVICE_NAMESPACE, body);
+    }
+
+    /** Step 5 - FullCountryInfo operation: takes sCountryISOCode, returns FullCountryInfoResult. */
+    public static String fullCountryInfo(String isoCode) {
+        String body = "<web:FullCountryInfo><web:sCountryISOCode>%s</web:sCountryISOCode></web:FullCountryInfo>"
+                .formatted(escape(isoCode));
         return TEMPLATE.formatted(SERVICE_NAMESPACE, body);
     }
 
