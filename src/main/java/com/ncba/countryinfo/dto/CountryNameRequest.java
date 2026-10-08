@@ -1,0 +1,13 @@
+package com.ncba.countryinfo.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
+/** Body of POST /api/v1/countries, e.g. { "name": "Tanzania" }. */
+public record CountryNameRequest(
+        @NotBlank(message = "name is required")
+        @Size(max = 100, message = "name must be at most 100 characters")
+        @Pattern(regexp = "^[\\p{L} .'()-]+$", message = "name may only contain letters, spaces and . ' ( ) -")
+        String name) {
+}
