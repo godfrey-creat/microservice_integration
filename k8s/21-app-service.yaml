@@ -1,0 +1,16 @@
+# Load-balances across all READY app pods (unready pods are removed automatically)
+apiVersion: v1
+kind: Service
+metadata:
+  name: country-info-service
+  namespace: country-info
+  labels:
+    app: country-info-service
+spec:
+  type: ClusterIP
+  selector:
+    app: country-info-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

@@ -1,0 +1,33 @@
+# Local run of the packaged image + its own MySQL:  docker compose up --build
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: countrydb
+      MYSQL_USER: country_user
+      MYSQL_PASSWORD: country_pass
+      MYSQL_ROOT_PASSWORD: root_pass
+    volumes:
+      - compose-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot_pass"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    image: country-info-service:1.0.0
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/countrydb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USERNAME: country_user
+      DB_PASSWORD: country_pass
+      SPRING_PROFILES_ACTIVE: prod
+    ports:
+      - "8080:8080"
+
+volumes:
+  compose-mysql-data:

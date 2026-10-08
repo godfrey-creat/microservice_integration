@@ -1,0 +1,18 @@
+# Only the application pods may connect to MySQL
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mysql-allow-app-only
+  namespace: country-info
+spec:
+  podSelector:
+    matchLabels:
+      app: mysql
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: country-info-service
+      ports:
+        - port: 3306

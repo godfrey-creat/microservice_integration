@@ -1,0 +1,14 @@
+# Non-secret configuration. Change values here and `kubectl rollout restart` to apply.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: country-info-config
+  namespace: country-info
+data:
+  SPRING_PROFILES_ACTIVE: "prod"
+  DB_URL: "jdbc:mysql://mysql.country-info.svc.cluster.local:3306/countrydb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+  DB_POOL_SIZE: "10"
+  SOAP_ENDPOINT_URL: "http://webservices.oorsprong.org/websamples.countryinfo/CountryInfoService.wso"
+  SOAP_CONNECT_TIMEOUT: "3s"
+  SOAP_READ_TIMEOUT: "5s"
+  APP_LOG_LEVEL: "INFO"

@@ -1,0 +1,21 @@
+# External access via NGINX Ingress. Add "<minikube ip> country-info.local" to /etc/hosts.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: country-info-service
+  namespace: country-info
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: country-info.local
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: country-info-service
+                port:
+                  name: http
